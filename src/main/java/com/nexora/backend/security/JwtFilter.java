@@ -29,16 +29,23 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            request.setAttribute("auth_error", "No Authorization header sent to the backend");
+        } else {
             String token = authHeader.substring(7);
+            try {
+                if (jwtUtil.isTokenValid(token)) {
+                    String username = jwtUtil.extractUsername(token);
 
-            if (jwtUtil.isTokenValid(token)) {
-                String username = jwtUtil.extractUsername(token);
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(username, null, Collections.emptyList());
 
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(username, null, Collections.emptyList());
-
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    request.setAttribute("auth_error", "Token failed validation (isTokenValid returned false)");
+                }
+            } catch (Exception e) {
+                request.setAttribute("auth_error", "Token parsing threw: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             }
         }
 
