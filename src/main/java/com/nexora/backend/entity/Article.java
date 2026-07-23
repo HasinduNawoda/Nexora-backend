@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 public class Article {
@@ -44,9 +46,13 @@ public class Article {
     private String metaTitle;
     private String metaDescription;
 
-    @ManyToOne
-    @JoinColumn(name = "category_id")
-    private Category category;
+    @ManyToMany
+    @JoinTable(
+            name = "article_categories",
+            joinColumns = @JoinColumn(name = "article_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id")
+    )
+    private Set<Category> categories = new HashSet<>();
 
     // Keep all your existing getters and setters exactly as they are — don't delete them
     public Long getId() { return id; }
@@ -77,6 +83,6 @@ public class Article {
     public void setMetaTitle(String metaTitle) { this.metaTitle = metaTitle; }
     public String getMetaDescription() { return metaDescription; }
     public void setMetaDescription(String metaDescription) { this.metaDescription = metaDescription; }
-    public Category getCategory() { return category; }
-    public void setCategory(Category category) { this.category = category; }
+    public Set<Category> getCategories() { return categories; }
+    public void setCategories(Set<Category> categories) { this.categories = categories; }
 }
