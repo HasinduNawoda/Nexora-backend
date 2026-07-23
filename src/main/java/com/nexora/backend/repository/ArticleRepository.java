@@ -10,4 +10,6 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     Optional<Article> findBySlug(String slug);
 
     List<Article> findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(String title, String content);
+
+    List<Article> findByCategoryId(Long categoryId);
 }
