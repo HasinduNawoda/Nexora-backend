@@ -45,9 +45,10 @@ public class CategoryController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // DELETE a category — articles in this category are reassigned to
-    // "Uncategorized" (category = null) instead of being deleted or blocking
-    // the deletion with a foreign key error.
+    // DELETE a category — articles that had this category keep their other
+    // categories; if this was their only one, they fall back to
+    // "Uncategorized" (an empty categories set) instead of being deleted or
+    // blocking the deletion with a foreign key error.
     @Transactional
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCategory(@PathVariable Long id) {
@@ -55,9 +56,9 @@ public class CategoryController {
             return ResponseEntity.notFound().build();
         }
 
-        List<Article> articlesInCategory = articleRepository.findByCategoryId(id);
+        List<Article> articlesInCategory = articleRepository.findByCategoriesId(id);
         for (Article article : articlesInCategory) {
-            article.setCategory(null);
+            article.getCategories().removeIf(c -> c.getId().equals(id));
         }
         articleRepository.saveAll(articlesInCategory);
 
