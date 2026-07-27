@@ -55,9 +55,9 @@ public class CategoryController {
             return ResponseEntity.notFound().build();
         }
 
-        List<Article> articlesInCategory = articleRepository.findByCategoryId(id);
+        List<Article> articlesInCategory = articleRepository.findByCategoriesId(id);
         for (Article article : articlesInCategory) {
-            article.setCategory(null);
+            article.getCategories().removeIf(c -> c.getId().equals(id));
         }
         articleRepository.saveAll(articlesInCategory);
 
