@@ -21,4 +21,10 @@ public class GlobalExceptionHandler {
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
     }
+
+    @ExceptionHandler(GmailAccessRevokedException.class)
+    public ResponseEntity<Map<String, String>> handleGmailRevoked(GmailAccessRevokedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
 }

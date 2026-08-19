@@ -19,7 +19,7 @@ public class CorsConfig {
                 "http://localhost:3000",
                 "https://nexora.hasindunawoda78.workers.dev"
         ));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
