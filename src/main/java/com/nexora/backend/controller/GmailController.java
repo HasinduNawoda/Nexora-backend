@@ -7,7 +7,7 @@ import com.nexora.backend.service.GmailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.net.URI;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/gmail")
@@ -40,12 +40,20 @@ public class GmailController {
         return ResponseEntity.ok(gmailService.sync());
     }
 
-    // Google redirects the browser here with ?code=&state= — no JWT header.
-    // This endpoint is permitAll() in SecurityConfig.
+    // Google redirects the browser to the FRONTEND /admin/gmail/callback, which
+    // then calls this endpoint directly with code+state via the JWT-authenticated
+    // api client. Returns JSON so the frontend can handle success/error display.
+    // Still permitAll() in SecurityConfig because the frontend page calls it
+    // without a JWT (the user may not be "logged in" in the new tab context).
     @GetMapping("/callback")
-    public ResponseEntity<Void> handleCallback(@RequestParam("code") String code,
-                                                @RequestParam("state") String state) {
-        String redirectUrl = gmailService.handleCallback(code, state);
-        return ResponseEntity.status(302).location(URI.create(redirectUrl)).build();
+    public ResponseEntity<Map<String, Object>> handleCallback(
+            @RequestParam("code") String code,
+            @RequestParam("state") String state) {
+        boolean success = gmailService.handleCallback(code, state);
+        if (success) {
+            return ResponseEntity.ok(Map.of("success", true));
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Invalid state or token exchange failed"));
+        }
     }
 }

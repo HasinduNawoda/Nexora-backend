@@ -52,9 +52,6 @@ public class GmailService {
     @Value("${gmail.redirect-uri}")
     private String redirectUri;
 
-    @Value("${gmail.frontend-redirect}")
-    private String frontendRedirect;
-
     public GmailService(GmailConnectionRepository connectionRepository,
                         NewsItemRepository newsItemRepository,
                         TokenEncryptionService encryptionService) {
@@ -103,11 +100,11 @@ public class GmailService {
 
     // ─── OAuth Callback ──────────────────────────────────────────────────
 
-    public String handleCallback(String code, String state) {
+    public boolean handleCallback(String code, String state) {
         // Verify state parameter
         GmailConnection conn = connectionRepository.findById(SINGLE_ROW_ID).orElse(null);
         if (conn == null || conn.getOauthState() == null || !conn.getOauthState().equals(state)) {
-            return frontendRedirect + "?gmail=error&reason=invalid_state";
+            return false;
         }
 
         try {
@@ -139,11 +136,12 @@ public class GmailService {
             conn.setOauthState(null); // Clear used state
             connectionRepository.save(conn);
 
-            return frontendRedirect + "?gmail=connected";
+            return true;
         } catch (Exception e) {
-            return frontendRedirect + "?gmail=error&reason=token_exchange_failed";
+            return false;
         }
     }
+
 
     // ─── Disconnect ──────────────────────────────────────────────────────
 
