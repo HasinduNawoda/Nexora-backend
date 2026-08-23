@@ -27,10 +27,13 @@ public class JwtFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
+        request.setAttribute("jwt_filter_ran", "true");
+
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             request.setAttribute("auth_error", "No Authorization header sent to the backend");
+            request.setAttribute("jwt_debug", "no_auth_header");
         } else {
             String token = authHeader.substring(7);
             try {
@@ -41,14 +44,17 @@ public class JwtFilter extends OncePerRequestFilter {
                             new UsernamePasswordAuthenticationToken(username, null, Collections.emptyList());
 
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    request.setAttribute("jwt_debug", "auth_set_for_" + username);
                 } else {
                     request.setAttribute("auth_error", "Token failed validation (isTokenValid returned false)");
+                    request.setAttribute("jwt_debug", "token_invalid");
                 }
             } catch (Exception e) {
                 request.setAttribute("auth_error", "Token parsing threw: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                request.setAttribute("jwt_debug", "exception_" + e.getClass().getSimpleName());
             }
         }
 
         filterChain.doFilter(request, response);
     }
-}
+}

@@ -35,10 +35,24 @@ public class SecurityConfig {
                                  jakarta.servlet.http.HttpServletResponse response,
                                  int status) throws java.io.IOException {
         Object reason = request.getAttribute("auth_error");
+        Object filterRan = request.getAttribute("jwt_filter_ran");
+        Object debug = request.getAttribute("jwt_debug");
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
         response.setStatus(status);
         response.setContentType("application/json");
-        String message = reason != null ? reason.toString() : "Rejected before reaching the controller (no auth_error attribute set)";
-        response.getWriter().write("{\"error\":\"" + message.replace("\"", "'") + "\"}");
+
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"status\":").append(status);
+        sb.append(",\"auth_error\":\"").append(reason != null ? reason.toString().replace("\"", "'") : "null").append("\"");
+        sb.append(",\"jwt_filter_ran\":\"").append(filterRan).append("\"");
+        sb.append(",\"jwt_debug\":\"").append(debug).append("\"");
+        sb.append(",\"security_context_auth\":\"").append(auth != null ? auth.getClass().getSimpleName() + "[" + auth.getName() + ",authenticated=" + auth.isAuthenticated() + "]" : "null").append("\"");
+        sb.append(",\"request_uri\":\"").append(request.getRequestURI()).append("\"");
+        sb.append(",\"method\":\"").append(request.getMethod()).append("\"");
+        sb.append("}");
+
+        response.getWriter().write(sb.toString());
     }
 
     @Bean
