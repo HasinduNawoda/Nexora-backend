@@ -27,7 +27,6 @@ import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.math.BigInteger;
 import java.time.Instant;
 import java.util.*;
 
@@ -161,25 +160,22 @@ public class GmailService {
 
     // ─── Dynamic News Feed Fetcher ───────────────────────────────────────
     
-    // Prototype එකේ තිබූ Dynamic ඊමේල් ලබාගැනීමේ කොටස ප්‍රධාන පද්ධතියට ගැලපෙන සේ සකසා ඇත
-    // ─── Dynamic News Feed Fetcher ───────────────────────────────────────
-    
     public List<Map<String, String>> getNewsEmails(List<String> senders) {
         List<Map<String, String>> emailList = new ArrayList<>();
         try {
             HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
             
-            GoogleClientSecrets.Details details = new GoogleClientSecrets.Details();
-            details.setClientId(clientId);
-            details.setClientSecret(clientSecret);
-            GoogleClientSecrets clientSecrets = new GoogleClientSecrets().setWeb(details);
+            com.google.api.client.auth.oauth2.ClientParametersAuthentication clientAuth = 
+                    new com.google.api.client.auth.oauth2.ClientParametersAuthentication(clientId, clientSecret);
 
             GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                    transport, JSON_FACTORY, clientSecrets, List.of("https://www.googleapis.com/auth/gmail.readonly"))
+                    transport, JSON_FACTORY, transport,
+                    "https://oauth2.googleapis.com/token",
+                    clientAuth,
+                    List.of("https://www.googleapis.com/auth/gmail.readonly"))
                     .setDataStoreFactory(new com.google.api.client.util.store.FileDataStoreFactory(new java.io.File("tokens")))
                     .build();
 
-            // ඩේටාබේස් එක පරීක්ෂා කිරීමකින් තොරව කෙලින්ම tokens ෆෝල්ඩරයෙන් credential එක ලබා ගැනීම
             Credential credential = flow.loadCredential("user");
             if (credential == null) {
                 throw new RuntimeException("Gmail tokens not found in 'tokens' folder.");
