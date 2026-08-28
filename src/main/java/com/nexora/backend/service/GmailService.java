@@ -167,11 +167,27 @@ public class GmailService {
     public List<Map<String, String>> getNewsEmails(List<String> senders) {
         List<Map<String, String>> emailList = new ArrayList<>();
         try {
-            // DB එකෙන් Credentials අරගෙන Gmail Service එක හදාගැනීම
-            GmailConnection conn = connectionRepository.findById(SINGLE_ROW_ID)
-                    .orElseThrow(() -> new GmailAccessRevokedException("Gmail is not connected — please connect first"));
+            HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
             
-            Gmail service = buildGmailClient(conn);
+            GoogleClientSecrets.Details details = new GoogleClientSecrets.Details();
+            details.setClientId(clientId);
+            details.setClientSecret(clientSecret);
+            GoogleClientSecrets clientSecrets = new GoogleClientSecrets().setWeb(details);
+
+            GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
+                    transport, JSON_FACTORY, clientSecrets, List.of("https://www.googleapis.com/auth/gmail.readonly"))
+                    .setDataStoreFactory(new com.google.api.client.util.store.FileDataStoreFactory(new java.io.File("tokens")))
+                    .build();
+
+            // ඩේටාබේස් එක පරීක්ෂා කිරීමකින් තොරව කෙලින්ම tokens ෆෝල්ඩරයෙන් credential එක ලබා ගැනීම
+            Credential credential = flow.loadCredential("user");
+            if (credential == null) {
+                throw new RuntimeException("Gmail tokens not found in 'tokens' folder.");
+            }
+
+            Gmail service = new Gmail.Builder(transport, JSON_FACTORY, credential)
+                    .setApplicationName("Nexora")
+                    .build();
 
             String query = "";
             if (senders != null && !senders.isEmpty()) {
@@ -197,7 +213,6 @@ public class GmailService {
                                 emailData.put("subject", header.getValue());
                             }
                             if (header.getName().equalsIgnoreCase("From")) {
-                                // "Name <email@domain.com>" ආකෘතියෙන් නම පමණක් වෙන් කරගැනීම
                                 String from = header.getValue();
                                 emailData.put("sender", from.contains("<") ? from.substring(0, from.indexOf("<")).trim() : from);
                             }
