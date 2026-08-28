@@ -77,7 +77,6 @@ public class GmailService {
     public GmailAuthUrlResponse buildAuthUrl() {
         String state = UUID.randomUUID().toString();
 
-        // Store the state in the connection row (upsert)
         GmailConnection conn = connectionRepository.findById(SINGLE_ROW_ID)
                 .orElse(new GmailConnection());
         conn.setOauthState(state);
@@ -101,7 +100,6 @@ public class GmailService {
     // ─── OAuth Callback ──────────────────────────────────────────────────
 
     public boolean handleCallback(String code, String state) {
-        // Verify state parameter
         GmailConnection conn = connectionRepository.findById(SINGLE_ROW_ID).orElse(null);
         if (conn == null || conn.getOauthState() == null || !conn.getOauthState().equals(state)) {
             return false;
@@ -118,7 +116,6 @@ public class GmailService {
             String refreshToken = tokenResponse.getRefreshToken();
             Long expiresInSeconds = tokenResponse.getExpiresInSeconds();
 
-            // Build Gmail service to fetch user profile
             Credential credential = new Credential(BearerToken.authorizationHeaderAccessMethod())
                     .setAccessToken(accessToken);
             Gmail gmail = new Gmail.Builder(transport, JSON_FACTORY, credential)
@@ -127,13 +124,12 @@ public class GmailService {
 
             Profile profile = gmail.users().getProfile("me").execute();
 
-            // Store connection with encrypted tokens
             conn.setEmail(profile.getEmailAddress());
             conn.setEncryptedAccessToken(encryptionService.encrypt(accessToken));
             conn.setEncryptedRefreshToken(encryptionService.encrypt(refreshToken));
             conn.setTokenExpiry(Instant.now().plusSeconds(expiresInSeconds != null ? expiresInSeconds : 3600));
             conn.setHistoryId(profile.getHistoryId());
-            conn.setOauthState(null); // Clear used state
+            conn.setOauthState(null); 
             connectionRepository.save(conn);
 
             return true;
@@ -142,12 +138,10 @@ public class GmailService {
         }
     }
 
-
     // ─── Disconnect ──────────────────────────────────────────────────────
 
     public void disconnect() {
         connectionRepository.findById(SINGLE_ROW_ID).ifPresent(conn -> {
-            // Attempt to revoke the token at Google (best-effort)
             try {
                 String accessToken = encryptionService.decrypt(conn.getEncryptedAccessToken());
                 if (accessToken != null) {
@@ -160,10 +154,73 @@ public class GmailService {
                             .execute();
                 }
             } catch (Exception ignored) {
-                // Best-effort revocation — don't fail disconnect if Google is unreachable
             }
             connectionRepository.delete(conn);
         });
+    }
+
+    // ─── Dynamic News Feed Fetcher ───────────────────────────────────────
+    
+    // Prototype එකේ තිබූ Dynamic ඊමේල් ලබාගැනීමේ කොටස ප්‍රධාන පද්ධතියට ගැලපෙන සේ සකසා ඇත
+    // ─── Dynamic News Feed Fetcher ───────────────────────────────────────
+    
+    public List<Map<String, String>> getNewsEmails(List<String> senders) {
+        List<Map<String, String>> emailList = new ArrayList<>();
+        try {
+            // DB එකෙන් Credentials අරගෙන Gmail Service එක හදාගැනීම
+            GmailConnection conn = connectionRepository.findById(SINGLE_ROW_ID)
+                    .orElseThrow(() -> new GmailAccessRevokedException("Gmail is not connected — please connect first"));
+            
+            Gmail service = buildGmailClient(conn);
+
+            String query = "";
+            if (senders != null && !senders.isEmpty()) {
+                query = "from:(" + String.join(" OR ", senders) + ")";
+            } else {
+                query = "from:(@openai.com OR @techcrunch.com)";
+            }
+
+            ListMessagesResponse response = service.users().messages().list("me").setQ(query).execute();
+            List<Message> messages = response.getMessages();
+
+            if (messages != null) {
+                for (Message msg : messages) {
+                    Message fullMsg = service.users().messages().get("me", msg.getId()).execute();
+                    
+                    Map<String, String> emailData = new HashMap<>();
+                    emailData.put("id", msg.getId());
+                    emailData.put("snippet", fullMsg.getSnippet());
+
+                    if (fullMsg.getPayload() != null && fullMsg.getPayload().getHeaders() != null) {
+                        for (MessagePartHeader header : fullMsg.getPayload().getHeaders()) {
+                            if (header.getName().equalsIgnoreCase("Subject")) {
+                                emailData.put("subject", header.getValue());
+                            }
+                            if (header.getName().equalsIgnoreCase("From")) {
+                                // "Name <email@domain.com>" ආකෘතියෙන් නම පමණක් වෙන් කරගැනීම
+                                String from = header.getValue();
+                                emailData.put("sender", from.contains("<") ? from.substring(0, from.indexOf("<")).trim() : from);
+                            }
+                        }
+                    }
+                    
+                    emailData.putIfAbsent("subject", "(No Subject)");
+                    emailData.putIfAbsent("sender", "Unknown Sender");
+                    
+                    emailList.add(emailData);
+                }
+            } else {
+                Map<String, String> emptyInfo = new HashMap<>();
+                emptyInfo.put("snippet", "No news emails found.");
+                emailList.add(emptyInfo);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, String> errorInfo = new HashMap<>();
+            errorInfo.put("error", "Error fetching emails: " + e.getMessage());
+            emailList.add(errorInfo);
+        }
+        return emailList;
     }
 
     // ─── Sync ────────────────────────────────────────────────────────────
@@ -179,18 +236,15 @@ public class GmailService {
             int skipped = 0;
 
             if (conn.getHistoryId() != null && conn.getLastSyncedAt() != null) {
-                // Incremental sync via History API
                 SyncResult result = syncViaHistory(gmail, conn);
                 imported = result.imported;
                 skipped = result.skipped;
             } else {
-                // Initial sync — fetch recent messages
                 SyncResult result = syncInitial(gmail);
                 imported = result.imported;
                 skipped = result.skipped;
             }
 
-            // Update historyId and lastSyncedAt
             Profile profile = gmail.users().getProfile("me").execute();
             conn.setHistoryId(profile.getHistoryId());
             conn.setLastSyncedAt(Instant.now());
@@ -231,7 +285,7 @@ public class GmailService {
 
     private void refreshAccessTokenIfNeeded(GmailConnection conn) throws Exception {
         if (conn.getTokenExpiry() != null && Instant.now().isBefore(conn.getTokenExpiry().minusSeconds(60))) {
-            return; // Token is still fresh
+            return; 
         }
 
         String refreshToken = encryptionService.decrypt(conn.getEncryptedRefreshToken());
@@ -339,7 +393,6 @@ public class GmailService {
             }
         } catch (com.google.api.client.http.HttpResponseException e) {
             if (e.getStatusCode() == 404) {
-                // historyId is too old — fall back to initial sync
                 return syncInitial(gmail);
             }
             throw e;
@@ -372,10 +425,9 @@ public class GmailService {
         }
 
         if (subject == null && from == null) {
-            return null; // Skip messages with no useful metadata
+            return null; 
         }
 
-        // Extract body text
         String bodyHtml = extractBody(payload, "text/html");
         String bodyText = extractBody(payload, "text/plain");
 
@@ -390,13 +442,8 @@ public class GmailService {
             previewText = previewText.substring(0, PREVIEW_MAX_LENGTH) + "...";
         }
 
-        // Extract source URL from HTML body
         String sourceUrl = extractSourceUrl(bodyHtml);
-
-        // Parse received date
         Instant receivedAt = parseDate(message.getInternalDate());
-
-        // Parse sender name
         String source = parseSenderName(from);
 
         NewsItem item = new NewsItem();
@@ -451,14 +498,12 @@ public class GmailService {
                 }
             }
         } catch (Exception ignored) {
-            // Best-effort extraction
         }
         return null;
     }
 
     private String parseSenderName(String from) {
         if (from == null) return null;
-        // "John Doe <john@example.com>" -> "John Doe"
         int angleBracket = from.indexOf('<');
         if (angleBracket > 0) {
             return from.substring(0, angleBracket).trim().replaceAll("^\"|\"$", "");
@@ -480,7 +525,6 @@ public class GmailService {
         String lowerSubject = subject != null ? subject.toLowerCase() : "";
         String combined = lowerFrom + " " + lowerSubject;
 
-        // Sender-based matching
         if (lowerFrom.contains("github.com") || lowerFrom.contains("gitlab")) return "Development";
         if (lowerFrom.contains("medium.com") || lowerFrom.contains("dev.to")) return "Tech";
         if (lowerFrom.contains("substack.com")) return "Newsletter";
@@ -489,7 +533,6 @@ public class GmailService {
         if (lowerFrom.contains("stripe") || lowerFrom.contains("paypal")) return "Finance";
         if (lowerFrom.contains("aws.amazon") || lowerFrom.contains("cloud.google") || lowerFrom.contains("azure")) return "Cloud";
 
-        // Subject keyword matching
         if (combined.contains("security") || combined.contains("vulnerability") || combined.contains("cve")) return "Security";
         if (combined.contains("marketing") || combined.contains("campaign") || combined.contains("seo")) return "Marketing";
         if (combined.contains("design") || combined.contains("ux") || combined.contains("ui")) return "Design";
@@ -502,14 +545,12 @@ public class GmailService {
     }
 
     private void handleTokenError(GmailConnection conn) {
-        // Clear tokens but keep the row so status shows disconnected state
         conn.setEncryptedAccessToken(null);
         conn.setEncryptedRefreshToken(null);
         conn.setTokenExpiry(null);
         connectionRepository.save(conn);
     }
 
-    // Simple holder for sync result counts
     private static class SyncResult {
         final int imported;
         final int skipped;

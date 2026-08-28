@@ -5,17 +5,24 @@ import com.nexora.backend.dto.NewsPageResponse;
 import com.nexora.backend.dto.ReadStatusRequest;
 import com.nexora.backend.dto.ReadStatusResponse;
 import com.nexora.backend.service.NewsService;
+import com.nexora.backend.service.GmailService; // අලුතින් එකතු කළ import එක
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List; // අලුතින් එකතු කළ import එක
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/news")
 public class NewsController {
 
     private final NewsService newsService;
+    private final GmailService gmailService; // අලුතින් එකතු කළ කොටස
 
-    public NewsController(NewsService newsService) {
+    // Constructor එක යාවත්කාලීන කර ඇත
+    public NewsController(NewsService newsService, GmailService gmailService) {
         this.newsService = newsService;
+        this.gmailService = gmailService;
     }
 
     @GetMapping
@@ -54,5 +61,16 @@ public class NewsController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent().build();
+    }
+
+    // --- අලුතින් එකතු කළ Gmail Fetch Endpoint එක ---
+    // Fixed: getNewsEmails() returns List<Map<String, String>> (each item has
+    // id/sender/subject/snippet, or an "error"/"snippet"-only fallback) — the
+    // previous List<String> declaration here didn't match and wouldn't compile.
+    @GetMapping("/gmail-fetch")
+    public ResponseEntity<List<Map<String, String>>> fetchNewsFromGmail(
+            @RequestParam(required = false) List<String> senders) {
+        List<Map<String, String>> emails = gmailService.getNewsEmails(senders);
+        return ResponseEntity.ok(emails);
     }
 }
