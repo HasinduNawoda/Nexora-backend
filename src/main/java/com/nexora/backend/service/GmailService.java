@@ -164,16 +164,17 @@ public class GmailService {
         List<Map<String, String>> emailList = new ArrayList<>();
         try {
             HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
-            
-            com.google.api.client.auth.oauth2.ClientParametersAuthentication clientAuth = 
-                    new com.google.api.client.auth.oauth2.ClientParametersAuthentication(clientId, clientSecret);
+
+            // Load credentials from the bundled credentials.json (same as prototype)
+            java.io.InputStream in = GmailService.class.getResourceAsStream("/credentials.json");
+            com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets clientSecrets =
+                    com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets.load(JSON_FACTORY, new java.io.InputStreamReader(in));
 
             GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                    transport, JSON_FACTORY, transport,
-                    "https://oauth2.googleapis.com/token",
-                    clientAuth,
-                    List.of("https://www.googleapis.com/auth/gmail.readonly"))
+                    transport, JSON_FACTORY, clientSecrets,
+                    java.util.Collections.singletonList(GmailScopes.GMAIL_READONLY))
                     .setDataStoreFactory(new com.google.api.client.util.store.FileDataStoreFactory(new java.io.File("tokens")))
+                    .setAccessType("offline")
                     .build();
 
             Credential credential = flow.loadCredential("user");
