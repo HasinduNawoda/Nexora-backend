@@ -1,9 +1,31 @@
-HELP.md
+# Maven & Build output
 target/
-.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Spring Boot Local / Secret configs
 application-local.properties
+application-dev.properties
+
+# Google API & Security Credentials (Highly Sensitive!)
+credentials.json
+src/main/resources/credentials.json
+
+# OAuth Token Storage (Highly Sensitive!)
+tokens/
+tokens/*
+*/tokens/*
+
+# Logs
+*.log
+
+### OS Files ###
+.DS_Store
+Thumbs.db
 
 ### STS ###
 .apt_generated
@@ -26,9 +48,6 @@ application-local.properties
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
